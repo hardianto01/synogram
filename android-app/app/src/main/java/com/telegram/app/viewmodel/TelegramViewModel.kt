@@ -19,8 +19,17 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
     private val sessionPath = File(application.filesDir, "telegram.session").absolutePath
 
     private val client: TelegramClient by lazy {
+        try {
+            System.loadLibrary("telegram_core")
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
         TelegramClient(apiId, apiHash, sessionPath).apply {
-            initLogger()
+            try {
+                initLogger()
+            } catch (t: Throwable) {
+                t.printStackTrace()
+            }
         }
     }
 
@@ -42,10 +51,15 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
 
     private fun checkSession() {
         viewModelScope.launch(Dispatchers.IO) {
-            val authed = client.isAuthorized()
-            _isAuthorized.value = authed
-            if (authed) {
-                loadChats()
+            try {
+                val authed = client.isAuthorized()
+                _isAuthorized.value = authed
+                if (authed) {
+                    loadChats()
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+                _isAuthorized.value = false
             }
         }
     }
