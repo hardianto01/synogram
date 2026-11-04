@@ -43,9 +43,16 @@ pub struct TelegramClient {
     login_token: Arc<Mutex<Option<grammers_client::types::LoginToken>>>,
 }
 
+unsafe impl Send for TelegramClient {}
+unsafe impl Sync for TelegramClient {}
+
 impl TelegramClient {
     pub fn new(api_id: i32, api_hash: String, session_path: String) -> Self {
-        let rt = Runtime::new().expect("Gagal menginisialisasi Tokio runtime");
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("Gagal menginisialisasi Tokio runtime");
         Self {
             api_id,
             api_hash,
@@ -103,28 +110,35 @@ impl TelegramClient {
             return Err(TelegramError::InvalidPhone);
         }
 
-        self.runtime.block_on(async {
-            let session = Session::load_file_or_create(&self.session_path)
+        let api_id = self.api_id;
+        let api_hash = self.api_hash.clone();
+        let session_path = self.session_path.clone();
+
+        let (client, token) = self.runtime.block_on(async move {
+            let session = Session::load_file_or_create(&session_path)
                 .map_err(|e| TelegramError::InternalError(e.to_string()))?;
 
             let client = Client::connect(Config {
                 session,
-                api_id: self.api_id,
-                api_hash: self.api_hash.clone(),
+                api_id,
+                api_hash,
                 params: InitParams::default(),
             }).await.map_err(|e| TelegramError::NetworkError(e.to_string()))?;
 
             let token = client.request_login_code(&phone).await
                 .map_err(|e| TelegramError::NetworkError(e.to_string()))?;
 
-            let mut client_lock = self.client.lock().unwrap();
+            Ok::<_, TelegramError>((client, token))
+        })?;
+
+        if let Ok(mut client_lock) = self.client.lock() {
             *client_lock = Some(client);
-
-            let mut token_lock = self.login_token.lock().unwrap();
+        }
+        if let Ok(mut token_lock) = self.login_token.lock() {
             *token_lock = Some(token);
+        }
 
-            Ok(phone)
-        })
+        Ok(phone_number)
     }
 
     pub fn submit_login_code(&self, phone_code: String, _phone_code_hash: String) -> Result<bool, TelegramError> {

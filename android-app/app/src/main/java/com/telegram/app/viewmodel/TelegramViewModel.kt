@@ -45,6 +45,9 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
     private val _chats = MutableStateFlow<List<ChatItem>>(emptyList())
     val chats = _chats.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage = _errorMessage.asStateFlow()
+
     init {
         checkSession()
     }
@@ -67,11 +70,13 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
     fun sendPhoneNumber(phone: String) {
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
+            _errorMessage.value = null
             try {
                 val phoneCodeHash = client.requestLoginCode(phone)
                 _loginStep.value = LoginStep.EnterCode(phoneCodeHash)
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
+                _errorMessage.value = e.localizedMessage ?: "Gagal meminta kode verifikasi"
             } finally {
                 _isLoading.value = false
             }
@@ -82,14 +87,16 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
         val currentStep = _loginStep.value as? LoginStep.EnterCode ?: return
         viewModelScope.launch(Dispatchers.IO) {
             _isLoading.value = true
+            _errorMessage.value = null
             try {
                 val success = client.submitLoginCode(code, currentStep.phoneCodeHash)
                 if (success) {
                     _isAuthorized.value = true
                     loadChats()
                 }
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
+                _errorMessage.value = e.localizedMessage ?: "Kode verifikasi salah"
             } finally {
                 _isLoading.value = false
             }

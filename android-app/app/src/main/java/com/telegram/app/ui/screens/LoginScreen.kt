@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 fun LoginScreen(
     step: LoginStep,
     isLoading: Boolean,
+    errorMessage: String? = null,
     onSendPhone: (String) -> Unit,
     onSendCode: (String) -> Unit
 ) {
@@ -43,6 +44,22 @@ fun LoginScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            if (!errorMessage.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.small,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(12.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
 

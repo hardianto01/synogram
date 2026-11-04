@@ -30,12 +30,14 @@ class MainActivity : ComponentActivity() {
                     val isAuthorized by viewModel.isAuthorized.collectAsState()
                     val loginStep by viewModel.loginStep.collectAsState()
                     val isLoading by viewModel.isLoading.collectAsState()
+                    val errorMessage by viewModel.errorMessage.collectAsState()
                     val chats by viewModel.chats.collectAsState()
 
                     if (!isAuthorized) {
                         LoginScreen(
                             step = loginStep,
                             isLoading = isLoading,
+                            errorMessage = errorMessage,
                             onSendPhone = { viewModel.sendPhoneNumber(it) },
                             onSendCode = { viewModel.submitCode(it) }
                         )
