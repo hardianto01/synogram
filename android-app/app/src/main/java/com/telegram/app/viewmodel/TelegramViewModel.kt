@@ -94,11 +94,14 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
                     _isAuthorized.value = true
                     loadChats()
                 }
-            } catch (e: uniffi.telegram_core.TelegramException.Password2FARequired) {
-                _loginStep.value = LoginStep.EnterPassword("Masukkan kata sandi 2FA")
             } catch (e: Throwable) {
                 e.printStackTrace()
-                _errorMessage.value = e.localizedMessage ?: "Kode verifikasi salah"
+                val msg = e.localizedMessage ?: ""
+                if (msg.contains("Password2FARequired", ignoreCase = true) || e.javaClass.simpleName.contains("Password", ignoreCase = true)) {
+                    _loginStep.value = LoginStep.EnterPassword("Masukkan kata sandi 2FA")
+                } else {
+                    _errorMessage.value = if (msg.isNotBlank()) msg else "Kode verifikasi salah"
+                }
             } finally {
                 _isLoading.value = false
             }
