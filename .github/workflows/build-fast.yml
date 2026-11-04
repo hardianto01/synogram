@@ -65,17 +65,15 @@ jobs:
           mkdir -p ../android-app/app/src/main/java/com/telegram/core
           cargo run --bin uniffi-bindgen generate src/telegram.udl --language kotlin --out-dir ../android-app/app/src/main/java/com/telegram/core
 
-      - name: Gradle Cache & Build APK
+      - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
         with:
-          cache-read-only: false
+          gradle-version: '8.7'
 
       - name: Assemble Debug APK
         run: |
           cd android-app
-          chmod +x gradlew || true
-          # Run assemble debug (hanya arsitektur arm64-v8a untuk development)
-          ./gradlew assembleDebug -PtargetArch=arm64-v8a || echo "Gradle wrapper ready"
+          gradle assembleDebug --no-daemon
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
