@@ -15,6 +15,7 @@ enum TelegramError {
     "NetworkError",
     "InvalidPhone",
     "InvalidCode",
+    "Password2FARequired",
     "SessionExpired",
     "InternalError",
 };

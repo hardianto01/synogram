@@ -204,10 +204,12 @@ impl TelegramClient {
                 lock.clone().ok_or_else(|| TelegramError::InternalError("Belum login".to_string()))?
             };
 
-            let peer = client.resolve_phone_or_username(&chat_id.to_string()).await;
-            if let Ok(Some(chat)) = peer {
-                let _ = client.send_message(&chat, text).await;
-            }
+            let chat = match client.resolve_username(&chat_id.to_string()).await {
+                Ok(Some(c)) => c,
+                _ => return Err(TelegramError::InternalError("Chat tidak ditemukan".to_string())),
+            };
+            client.send_message(&chat, text).await
+                .map_err(|e| TelegramError::NetworkError(e.to_string()))?;
             Ok(())
         })
     }
