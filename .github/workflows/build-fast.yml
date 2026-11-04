@@ -63,7 +63,7 @@ jobs:
         run: |
           cd telegram-core
           mkdir -p ../android-app/app/src/main/java/com/telegram/core
-          cargo run --features cli --bin uniffi-bindgen generate src/telegram.udl --language kotlin --out-dir ../android-app/app/src/main/java/com/telegram/core
+          cargo run --bin uniffi-bindgen generate src/telegram.udl --language kotlin --out-dir ../android-app/app/src/main/java/com/telegram/core
 
       - name: Gradle Cache & Build APK
         uses: gradle/actions/setup-gradle@v3
