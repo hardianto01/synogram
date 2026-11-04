@@ -83,6 +83,6 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: app-debug-apk
+          name: synogram-debug-apk
           path: android-app/app/build/outputs/apk/debug/*.apk
-          if-no-files-found: ignore
+          if-no-files-found: warn

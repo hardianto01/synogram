@@ -107,4 +107,5 @@ fun LoginScreen(
 sealed interface LoginStep {
     object EnterPhone : LoginStep
     data class EnterCode(val phoneCodeHash: String) : LoginStep
+    data class EnterPassword(val hint: String) : LoginStep
 }

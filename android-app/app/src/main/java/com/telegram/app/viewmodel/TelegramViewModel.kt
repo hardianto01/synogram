@@ -94,6 +94,8 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
                     _isAuthorized.value = true
                     loadChats()
                 }
+            } catch (e: uniffi.telegram_core.TelegramException.Password2FARequired) {
+                _loginStep.value = LoginStep.EnterPassword("Masukkan kata sandi 2FA")
             } catch (e: Throwable) {
                 e.printStackTrace()
                 _errorMessage.value = e.localizedMessage ?: "Kode verifikasi salah"

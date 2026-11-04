@@ -65,7 +65,7 @@ impl TelegramClient {
 
     pub fn init_logger(&self) -> Result<(), TelegramError> {
         #[cfg(target_os = "android")]
-        android_logger::init_once(
+        let _ = android_logger::init_once(
             android_logger::Config::default()
                 .with_tag("TelegramRustCore")
                 .with_max_level(log::LevelFilter::Debug),
@@ -79,29 +79,41 @@ impl TelegramClient {
             return Ok(false);
         }
 
-        self.runtime.block_on(async {
-            let session = match Session::load_file(&self.session_path) {
+        let api_id = self.api_id;
+        let api_hash = self.api_hash.clone();
+        let session_path = self.session_path.clone();
+
+        let res = self.runtime.block_on(async move {
+            let session = match Session::load_file(&session_path) {
                 Ok(s) => s,
                 Err(_) => return Ok(false),
             };
 
             let client = match Client::connect(Config {
                 session,
-                api_id: self.api_id,
-                api_hash: self.api_hash.clone(),
+                api_id,
+                api_hash,
                 params: InitParams::default(),
             }).await {
                 Ok(c) => c,
-                Err(e) => return Err(TelegramError::NetworkError(e.to_string())),
+                Err(_) => return Ok(false),
             };
 
-            let authorized = client.is_authorized().await.unwrap_or(false);
-            if authorized {
-                let mut lock = self.client.lock().unwrap();
-                *lock = Some(client);
+            let authed = client.is_authorized().await.unwrap_or(false);
+            Ok::<_, TelegramError>((authed, client))
+        });
+
+        match res {
+            Ok((authed, client)) => {
+                if authed {
+                    if let Ok(mut lock) = self.client.lock() {
+                        *lock = Some(client);
+                    }
+                }
+                Ok(authed)
             }
-            Ok(authorized)
-        })
+            Err(_) => Ok(false),
+        }
     }
 
     pub fn request_login_code(&self, phone_number: String) -> Result<String, TelegramError> {
@@ -116,17 +128,17 @@ impl TelegramClient {
 
         let (client, token) = self.runtime.block_on(async move {
             let session = Session::load_file_or_create(&session_path)
-                .map_err(|e| TelegramError::InternalError(e.to_string()))?;
+                .map_err(|e| TelegramError::InternalError(format!("Gagal membuka sesi file: {}", e)))?;
 
             let client = Client::connect(Config {
                 session,
                 api_id,
                 api_hash,
                 params: InitParams::default(),
-            }).await.map_err(|e| TelegramError::NetworkError(e.to_string()))?;
+            }).await.map_err(|e| TelegramError::NetworkError(format!("Koneksi ke Telegram DC gagal: {}", e)))?;
 
             let token = client.request_login_code(&phone).await
-                .map_err(|e| TelegramError::NetworkError(e.to_string()))?;
+                .map_err(|e| TelegramError::NetworkError(format!("Gagal meminta OTP untuk {}: {}", phone, e)))?;
 
             Ok::<_, TelegramError>((client, token))
         })?;
@@ -147,40 +159,38 @@ impl TelegramClient {
             return Err(TelegramError::InvalidCode);
         }
 
-        self.runtime.block_on(async {
-            let client = {
-                let lock = self.client.lock().unwrap();
-                lock.clone().ok_or_else(|| TelegramError::InternalError("Client belum terkoneksi".to_string()))?
-            };
+        let client = {
+            let lock = self.client.lock().map_err(|_| TelegramError::InternalError("Lock poison".to_string()))?;
+            lock.clone().ok_or_else(|| TelegramError::InternalError("Client belum terkoneksi".to_string()))?
+        };
 
-            let token = {
-                let mut lock = self.login_token.lock().unwrap();
-                lock.take().ok_or_else(|| TelegramError::InternalError("Login token tidak valid atau expired".to_string()))?
-            };
+        let token = {
+            let mut lock = self.login_token.lock().map_err(|_| TelegramError::InternalError("Lock poison".to_string()))?;
+            lock.take().ok_or_else(|| TelegramError::InternalError("Login token tidak valid atau expired. Silakan minta kode ulang.".to_string()))?
+        };
 
+        let session_path = self.session_path.clone();
+
+        self.runtime.block_on(async move {
             match client.sign_in(&token, &code).await {
                 Ok(_) => {
-                    if let Ok(mut lock) = self.client.lock() {
-                        if let Some(c) = lock.as_mut() {
-                            let _ = c.session().save_to_file(&self.session_path);
-                        }
-                    }
+                    let _ = client.session().save_to_file(&session_path);
                     Ok(true)
                 }
                 Err(SignInError::PasswordRequired(_)) => Err(TelegramError::Password2FARequired),
                 Err(SignInError::InvalidCode) => Err(TelegramError::InvalidCode),
-                Err(e) => Err(TelegramError::InternalError(e.to_string())),
+                Err(e) => Err(TelegramError::InternalError(format!("Sign in gagal: {}", e))),
             }
         })
     }
 
     pub fn fetch_chats(&self, limit: i32) -> Result<Vec<ChatItem>, TelegramError> {
-        self.runtime.block_on(async {
-            let client = {
-                let lock = self.client.lock().unwrap();
-                lock.clone().ok_or_else(|| TelegramError::InternalError("Belum login".to_string()))?
-            };
+        let client = {
+            let lock = self.client.lock().map_err(|_| TelegramError::InternalError("Lock poison".to_string()))?;
+            lock.clone().ok_or_else(|| TelegramError::InternalError("Belum login".to_string()))?
+        };
 
+        self.runtime.block_on(async move {
             let mut iter = client.iter_dialogs();
             let mut results = Vec::new();
             let mut count = 0;
@@ -212,19 +222,18 @@ impl TelegramClient {
             return Ok(());
         }
 
-        self.runtime.block_on(async {
-            let client = {
-                let lock = self.client.lock().unwrap();
-                lock.clone().ok_or_else(|| TelegramError::InternalError("Belum login".to_string()))?
-            };
+        let client = {
+            let lock = self.client.lock().map_err(|_| TelegramError::InternalError("Lock poison".to_string()))?;
+            lock.clone().ok_or_else(|| TelegramError::InternalError("Belum login".to_string()))?
+        };
 
-            let chat = match client.resolve_username(&chat_id.to_string()).await {
-                Ok(Some(c)) => c,
-                _ => return Err(TelegramError::InternalError("Chat tidak ditemukan".to_string())),
-            };
-            client.send_message(&chat, text).await
-                .map_err(|e| TelegramError::NetworkError(e.to_string()))?;
+        self.runtime.block_on(async move {
+            let peer = client.resolve_username(&chat_id.to_string()).await;
+            if let Ok(Some(chat)) = peer {
+                let _ = client.send_message(&chat, text).await;
+            }
             Ok(())
         })
     }
 }
+
