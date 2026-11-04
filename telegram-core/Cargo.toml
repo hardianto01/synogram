@@ -1,0 +1,21 @@
+[package]
+name = "telegram-core"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "lib"]
+name = "telegram_core"
+
+[dependencies]
+uniffi = { version = "0.28", features = ["tokio"] }
+tokio = { version = "1", features = ["full"] }
+grammers-client = "0.7"
+grammers-session = "0.7"
+grammers-tl-types = "0.7"
+thiserror = "1.0"
+log = "0.4"
+android_logger = "0.14"
+
+[build-dependencies]
+uniffi = { version = "0.28", features = ["build"] }

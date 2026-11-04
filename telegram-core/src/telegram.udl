@@ -1,0 +1,42 @@
+namespace telegram_core {
+    string get_version();
+};
+
+dictionary ChatItem {
+    i64 id;
+    string title;
+    string last_message;
+    i64 timestamp;
+    i32 unread_count;
+};
+
+[Error]
+enum TelegramError {
+    "NetworkError",
+    "InvalidPhone",
+    "InvalidCode",
+    "SessionExpired",
+    "InternalError",
+};
+
+interface TelegramClient {
+    constructor(i32 api_id, string api_hash, string session_path);
+
+    [Throws=TelegramError]
+    void init_logger();
+
+    [Throws=TelegramError]
+    boolean is_authorized();
+
+    [Throws=TelegramError]
+    string request_login_code(string phone_number);
+
+    [Throws=TelegramError]
+    boolean submit_login_code(string phone_code, string phone_code_hash);
+
+    [Throws=TelegramError]
+    sequence<ChatItem> fetch_chats(i32 limit);
+
+    [Throws=TelegramError]
+    void send_text_message(i64 chat_id, string text);
+};

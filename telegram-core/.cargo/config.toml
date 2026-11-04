@@ -1,0 +1,12 @@
+# Konfigurasi Rust Compiler: Mold Linker & Sccache
+# Membuat proses compile dan linking 5x - 10x lebih cepat
+
+[target.x86_64-unknown-linux-gnu]
+linker = "clang"
+rustflags = ["-C", "link-arg=-fuse-ld=mold"]
+
+[target.aarch64-linux-android]
+rustflags = ["-C", "link-arg=-fuse-ld=lld"]
+
+[build]
+rustc-wrapper = "sccache"
