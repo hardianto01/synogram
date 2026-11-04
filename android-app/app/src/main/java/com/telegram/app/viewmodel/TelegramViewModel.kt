@@ -22,7 +22,7 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
         try {
             System.loadLibrary("uniffi_telegram_core")
         } catch (t: Throwable) {
-            t.printStackTrace()
+            println("Direct load error: ${t.message}")
         }
         TelegramClient(apiId, apiHash, sessionPath).apply {
             try {

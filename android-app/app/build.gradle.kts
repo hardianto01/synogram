@@ -33,6 +33,13 @@ android {
                 "proguard-rules.pro"
             )
         }
+        debug {
+            packaging {
+                jniLibs {
+                    useLegacyPackaging = true
+                }
+            }
+        }
     }
 
     compileOptions {
@@ -75,12 +82,13 @@ dependencies {
     implementation(libs.kotlinx.coroutines.core)
     implementation(libs.kotlinx.coroutines.android)
 
-    // JNA diperlukan oleh runtime UniFFI untuk load .so native library
+    // JNA & JNA Android untuk resolve lib native pada UniFFI
     implementation(libs.net.java.dev.jna) {
         artifact {
             type = "aar"
         }
     }
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
 
     debugImplementation(libs.androidx.ui.tooling)
 }
