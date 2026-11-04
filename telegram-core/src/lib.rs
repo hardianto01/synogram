@@ -86,7 +86,7 @@ impl TelegramClient {
         let res = self.runtime.block_on(async move {
             let session = match Session::load_file(&session_path) {
                 Ok(s) => s,
-                Err(_) => return Ok(false),
+                Err(_) => return Ok((false, None)),
             };
 
             let client = match Client::connect(Config {
@@ -96,18 +96,20 @@ impl TelegramClient {
                 params: InitParams::default(),
             }).await {
                 Ok(c) => c,
-                Err(_) => return Ok(false),
+                Err(_) => return Ok((false, None)),
             };
 
             let authed = client.is_authorized().await.unwrap_or(false);
-            Ok::<_, TelegramError>((authed, client))
+            Ok::<_, TelegramError>((authed, Some(client)))
         });
 
         match res {
-            Ok((authed, client)) => {
+            Ok((authed, maybe_client)) => {
                 if authed {
-                    if let Ok(mut lock) = self.client.lock() {
-                        *lock = Some(client);
+                    if let Some(c) = maybe_client {
+                        if let Ok(mut lock) = self.client.lock() {
+                            *lock = Some(c);
+                        }
                     }
                 }
                 Ok(authed)
