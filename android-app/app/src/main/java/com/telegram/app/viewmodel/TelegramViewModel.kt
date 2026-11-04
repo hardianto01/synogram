@@ -4,8 +4,8 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.telegram.app.ui.screens.LoginStep
-import com.telegram.core.ChatItem
-import com.telegram.core.TelegramClient
+import uniffi.telegram_core.ChatItem
+import uniffi.telegram_core.TelegramClient
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow

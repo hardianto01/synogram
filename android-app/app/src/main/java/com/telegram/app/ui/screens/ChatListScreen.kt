@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.telegram.core.ChatItem
+import uniffi.telegram_core.ChatItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

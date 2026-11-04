@@ -10,6 +10,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import uniffi.telegram_core.ChatItem
 import com.telegram.app.ui.screens.ChatListScreen
 import com.telegram.app.ui.screens.LoginScreen
 import com.telegram.app.viewmodel.TelegramViewModel
