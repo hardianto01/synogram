@@ -20,7 +20,7 @@ class TelegramViewModel(application: Application) : AndroidViewModel(application
 
     private val client: TelegramClient by lazy {
         try {
-            System.loadLibrary("telegram_core")
+            System.loadLibrary("uniffi_telegram_core")
         } catch (t: Throwable) {
             t.printStackTrace()
         }

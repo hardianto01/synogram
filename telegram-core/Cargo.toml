@@ -5,7 +5,7 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "staticlib", "lib"]
-name = "telegram_core"
+name = "uniffi_telegram_core"
 
 [[bin]]
 name = "uniffi-bindgen"
