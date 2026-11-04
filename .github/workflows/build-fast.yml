@@ -47,20 +47,21 @@ jobs:
           key: ${{ runner.os }}-cpp-ccache
           max-size: 2G
 
-      - name: Install cargo-ndk & uniffi-bindgen
+      - name: Install cargo-ndk
         run: |
           which cargo-ndk || cargo install cargo-ndk --locked
-          which uniffi-bindgen || cargo install uniffi-bindgen --locked
 
       - name: Build Rust Engine (.so) with Fast Linker
         run: |
           cd telegram-core
+          mkdir -p ../android-app/app/src/main/jniLibs/arm64-v8a
           cargo ndk -t arm64-v8a -o ../android-app/app/src/main/jniLibs build --release
 
       - name: Generate UniFFI Kotlin Bindings
         run: |
           cd telegram-core
-          uniffi-bindgen generate src/telegram.udl --language kotlin --out-dir ../android-app/app/src/main/java/com/telegram/core
+          mkdir -p ../android-app/app/src/main/java/com/telegram/core
+          cargo run --features cli --bin uniffi-bindgen generate src/telegram.udl --language kotlin --out-dir ../android-app/app/src/main/java/com/telegram/core
 
       - name: Gradle Cache & Build APK
         uses: gradle/actions/setup-gradle@v3
