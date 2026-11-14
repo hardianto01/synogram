@@ -1,8 +1,42 @@
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 use thiserror::Error;
-use grammers_client::{Client, Config, InitParams, SignInError};
+use grammers_client::{Client, Config, FixedReconnect, InitParams, InvocationError, SignInError};
+use grammers_client::types::LoginToken;
 use grammers_session::Session;
+
+/// Android sering memutus socket TCP idle (layar mati, pindah WiFi/4G, NAT timeout).
+/// Default grammers = NoReconnect, sehingga request berikutnya gagal
+/// "Software caused connection abort (os error 103)". Aktifkan auto-reconnect.
+static RECONNECT_POLICY: FixedReconnect = FixedReconnect {
+    attempts: 5,
+    delay: Duration::from_secs(1),
+};
+
+fn init_params() -> InitParams {
+    InitParams {
+        reconnection_policy: &RECONNECT_POLICY,
+        ..Default::default()
+    }
+}
+
+async fn connect_client(session_path: &str, api_id: i32, api_hash: String) -> Result<Client, TelegramError> {
+    let session = Session::load_file_or_create(session_path)
+        .map_err(|e| TelegramError::InternalError(format!("Gagal membuka sesi file: {}", e)))?;
+    Client::connect(Config {
+        session,
+        api_id,
+        api_hash,
+        params: init_params(),
+    })
+    .await
+    .map_err(|e| TelegramError::NetworkError(format!("Koneksi ke Telegram DC gagal: {}", e)))
+}
+
+fn is_network_error(e: &InvocationError) -> bool {
+    matches!(e, InvocationError::Read(_) | InvocationError::Dropped)
+}
 
 uniffi::include_scaffolding!("telegram");
 
@@ -40,7 +74,7 @@ pub struct TelegramClient {
     session_path: String,
     runtime: Arc<Runtime>,
     client: Arc<Mutex<Option<Client>>>,
-    login_token: Arc<Mutex<Option<grammers_client::types::LoginToken>>>,
+    login_token: Arc<Mutex<Option<LoginToken>>>,
 }
 
 unsafe impl Send for TelegramClient {}
@@ -93,7 +127,7 @@ impl TelegramClient {
                 session,
                 api_id,
                 api_hash,
-                params: InitParams::default(),
+                params: init_params(),
             }).await {
                 Ok(c) => c,
                 Err(_) => return Ok((false, None)),
@@ -129,18 +163,14 @@ impl TelegramClient {
         let session_path = self.session_path.clone();
 
         let (client, token) = self.runtime.block_on(async move {
-            let session = Session::load_file_or_create(&session_path)
-                .map_err(|e| TelegramError::InternalError(format!("Gagal membuka sesi file: {}", e)))?;
-
-            let client = Client::connect(Config {
-                session,
-                api_id,
-                api_hash,
-                params: InitParams::default(),
-            }).await.map_err(|e| TelegramError::NetworkError(format!("Koneksi ke Telegram DC gagal: {}", e)))?;
+            let client = connect_client(&session_path, api_id, api_hash).await?;
 
             let token = client.request_login_code(&phone).await
                 .map_err(|e| TelegramError::NetworkError(format!("Gagal meminta OTP untuk {}: {}", phone, e)))?;
+
+            // Simpan auth key ke file: phone_code_hash terikat ke auth key ini,
+            // jadi kalau koneksi putus kita bisa reconnect dengan key yang sama.
+            let _ = client.session().save_to_file(&session_path);
 
             Ok::<_, TelegramError>((client, token))
         })?;
@@ -172,18 +202,70 @@ impl TelegramClient {
         };
 
         let session_path = self.session_path.clone();
+        let api_id = self.api_id;
+        let api_hash = self.api_hash.clone();
 
-        self.runtime.block_on(async move {
-            match client.sign_in(&token, &code).await {
-                Ok(_) => {
-                    let _ = client.session().save_to_file(&session_path);
-                    Ok(true)
+        let (result, token_back, new_client) = self.runtime.block_on(async move {
+            let mut active = client;
+            let mut reconnected: Option<Client> = None;
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                match active.sign_in(&token, &code).await {
+                    Ok(_) => {
+                        let _ = active.session().save_to_file(&session_path);
+                        return (Ok(true), None, reconnected);
+                    }
+                    Err(SignInError::PasswordRequired(_)) => {
+                        return (Err(TelegramError::Password2FARequired), None, reconnected)
+                    }
+                    Err(SignInError::InvalidCode) => {
+                        // Kode salah: token masih valid, user boleh coba lagi.
+                        return (Err(TelegramError::InvalidCode), Some(token), reconnected)
+                    }
+                    Err(SignInError::Other(e)) if is_network_error(&e) && attempt < 3 => {
+                        log::warn!("sign_in network error (attempt {}): {}, reconnecting", attempt, e);
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        match connect_client(&session_path, api_id, api_hash.clone()).await {
+                            Ok(c) => {
+                                active = c.clone();
+                                reconnected = Some(c);
+                            }
+                            Err(_) => continue,
+                        }
+                    }
+                    Err(SignInError::Other(e)) if is_network_error(&e) => {
+                        return (
+                            Err(TelegramError::NetworkError(format!(
+                                "Koneksi terputus saat login, cek internet lalu tekan Masuk lagi: {}",
+                                e
+                            ))),
+                            Some(token),
+                            reconnected,
+                        )
+                    }
+                    Err(e) => {
+                        return (
+                            Err(TelegramError::InternalError(format!("Sign in gagal: {}", e))),
+                            None,
+                            reconnected,
+                        )
+                    }
                 }
-                Err(SignInError::PasswordRequired(_)) => Err(TelegramError::Password2FARequired),
-                Err(SignInError::InvalidCode) => Err(TelegramError::InvalidCode),
-                Err(e) => Err(TelegramError::InternalError(format!("Sign in gagal: {}", e))),
             }
-        })
+        });
+
+        if let Some(c) = new_client {
+            if let Ok(mut lock) = self.client.lock() {
+                *lock = Some(c);
+            }
+        }
+        if let Some(t) = token_back {
+            if let Ok(mut lock) = self.login_token.lock() {
+                *lock = Some(t);
+            }
+        }
+        result
     }
 
     pub fn fetch_chats(&self, limit: i32) -> Result<Vec<ChatItem>, TelegramError> {
